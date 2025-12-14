@@ -142,7 +142,7 @@
 
   .category-card {
     @apply relative overflow-hidden rounded-xl aspect-square bg-secondary 
-           transition-all duration-500 hover:shadow-hover group cursor-pointer;
+           transition-all duration-500 hover:shadow-hover cursor-pointer;
   }
 
   .input-modern {
