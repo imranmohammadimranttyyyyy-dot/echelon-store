@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Pencil, Trash2, Eye, EyeOff } from 'lucide-react';
+import { Plus, Pencil, Trash2, Eye, EyeOff, CheckCircle, XCircle, Clock, User } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { AdminLayout } from './AdminLayout';
 import { Button } from '@/components/ui/button';
@@ -8,7 +8,9 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Dialog,
   DialogContent,
@@ -38,6 +40,8 @@ interface Product {
   is_featured: boolean;
   category_id: string | null;
   images: string[] | null;
+  user_id: string | null;
+  status: string;
 }
 
 interface ProductFormData {
@@ -70,6 +74,7 @@ export default function AdminProducts() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [formData, setFormData] = useState<ProductFormData>(initialFormData);
+  const [activeTab, setActiveTab] = useState('all');
   const queryClient = useQueryClient();
 
   const { data: products, isLoading } = useQuery({
@@ -106,6 +111,7 @@ export default function AdminProducts() {
         is_featured: data.is_featured,
         category_id: data.category_id || null,
         images: images.length > 0 ? images : null,
+        status: 'approved', // Admin products are auto-approved
       });
       if (error) throw error;
     },
@@ -177,6 +183,20 @@ export default function AdminProducts() {
     },
   });
 
+  const updateStatusMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      const { error } = await supabase.from('products').update({ status }).eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: (_, { status }) => {
+      queryClient.invalidateQueries({ queryKey: ['admin-products'] });
+      toast.success(`Product ${status === 'approved' ? 'approved' : 'rejected'}!`);
+    },
+    onError: (error) => {
+      toast.error('Failed to update status: ' + error.message);
+    },
+  });
+
   const handleEdit = (product: Product) => {
     setEditingProduct(product);
     setFormData({
@@ -209,11 +229,34 @@ export default function AdminProducts() {
     setFormData(initialFormData);
   };
 
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'pending':
+        return <Badge variant="secondary" className="gap-1"><Clock className="w-3 h-3" /> Pending</Badge>;
+      case 'approved':
+        return <Badge variant="default" className="gap-1 bg-green-600"><CheckCircle className="w-3 h-3" /> Approved</Badge>;
+      case 'rejected':
+        return <Badge variant="destructive" className="gap-1"><XCircle className="w-3 h-3" /> Rejected</Badge>;
+      default:
+        return null;
+    }
+  };
+
+  const filteredProducts = products?.filter((product: any) => {
+    if (activeTab === 'all') return true;
+    if (activeTab === 'pending') return product.status === 'pending';
+    if (activeTab === 'user') return product.user_id !== null;
+    if (activeTab === 'admin') return product.user_id === null;
+    return true;
+  });
+
+  const pendingCount = products?.filter((p: any) => p.status === 'pending').length || 0;
+
   return (
     <AdminLayout title="Products" description="Manage your product catalog">
       <div className="flex justify-between items-center mb-6">
         <p className="text-muted-foreground">
-          {products?.length || 0} products
+          {products?.length || 0} products total
         </p>
         <Dialog open={isDialogOpen} onOpenChange={(open) => !open && handleDialogClose()}>
           <DialogTrigger asChild>
@@ -262,7 +305,7 @@ export default function AdminProducts() {
 
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <Label htmlFor="price">Price ($) *</Label>
+                  <Label htmlFor="price">Price (₹) *</Label>
                   <Input
                     id="price"
                     type="number"
@@ -273,7 +316,7 @@ export default function AdminProducts() {
                   />
                 </div>
                 <div>
-                  <Label htmlFor="discount_price">Discount Price ($)</Label>
+                  <Label htmlFor="discount_price">Discount Price (₹)</Label>
                   <Input
                     id="discount_price"
                     type="number"
@@ -355,9 +398,24 @@ export default function AdminProducts() {
         </Dialog>
       </div>
 
+      {/* Tabs for filtering */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
+        <TabsList>
+          <TabsTrigger value="all">All Products</TabsTrigger>
+          <TabsTrigger value="pending" className="gap-2">
+            Pending Review
+            {pendingCount > 0 && (
+              <Badge variant="destructive" className="ml-1 px-1.5 py-0 text-xs">{pendingCount}</Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="user">User Submitted</TabsTrigger>
+          <TabsTrigger value="admin">Admin Products</TabsTrigger>
+        </TabsList>
+      </Tabs>
+
       {isLoading ? (
         <div className="text-center py-12 text-muted-foreground">Loading...</div>
-      ) : products && products.length > 0 ? (
+      ) : filteredProducts && filteredProducts.length > 0 ? (
         <div className="border rounded-lg overflow-hidden">
           <Table>
             <TableHeader>
@@ -366,12 +424,14 @@ export default function AdminProducts() {
                 <TableHead>Category</TableHead>
                 <TableHead>Price</TableHead>
                 <TableHead>Stock</TableHead>
-                <TableHead>Status</TableHead>
+                <TableHead>Source</TableHead>
+                <TableHead>Review Status</TableHead>
+                <TableHead>Visibility</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {products.map((product: any) => (
+              {filteredProducts.map((product: any) => (
                 <TableRow key={product.id}>
                   <TableCell>
                     <div className="flex items-center gap-3">
@@ -394,16 +454,52 @@ export default function AdminProducts() {
                   <TableCell>
                     {product.discount_price ? (
                       <div>
-                        <span className="font-medium">${product.discount_price}</span>
+                        <span className="font-medium">₹{product.discount_price}</span>
                         <span className="text-muted-foreground line-through ml-2 text-sm">
-                          ${product.price}
+                          ₹{product.price}
                         </span>
                       </div>
                     ) : (
-                      <span className="font-medium">${product.price}</span>
+                      <span className="font-medium">₹{product.price}</span>
                     )}
                   </TableCell>
                   <TableCell>{product.stock}</TableCell>
+                  <TableCell>
+                    {product.user_id ? (
+                      <Badge variant="outline" className="gap-1">
+                        <User className="w-3 h-3" /> User
+                      </Badge>
+                    ) : (
+                      <Badge variant="secondary">Admin</Badge>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      {getStatusBadge(product.status)}
+                      {product.status === 'pending' && (
+                        <div className="flex gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => updateStatusMutation.mutate({ id: product.id, status: 'approved' })}
+                            title="Approve"
+                          >
+                            <CheckCircle className="w-4 h-4 text-green-600" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => updateStatusMutation.mutate({ id: product.id, status: 'rejected' })}
+                            title="Reject"
+                          >
+                            <XCircle className="w-4 h-4 text-destructive" />
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  </TableCell>
                   <TableCell>
                     <Button
                       variant="ghost"
@@ -443,7 +539,13 @@ export default function AdminProducts() {
         </div>
       ) : (
         <div className="text-center py-12 text-muted-foreground">
-          No products yet. Click "Add Product" to get started.
+          {activeTab === 'pending' 
+            ? 'No products pending review.'
+            : activeTab === 'user'
+            ? 'No user-submitted products yet.'
+            : activeTab === 'admin'
+            ? 'No admin products yet. Click "Add Product" to get started.'
+            : 'No products yet. Click "Add Product" to get started.'}
         </div>
       )}
     </AdminLayout>
