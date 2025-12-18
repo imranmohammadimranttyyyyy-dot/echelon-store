@@ -180,8 +180,10 @@ export type Database = {
           name: string
           price: number
           slug: string
+          status: string
           stock: number
           updated_at: string
+          user_id: string | null
         }
         Insert: {
           category_id?: string | null
@@ -195,8 +197,10 @@ export type Database = {
           name: string
           price: number
           slug: string
+          status?: string
           stock?: number
           updated_at?: string
+          user_id?: string | null
         }
         Update: {
           category_id?: string | null
@@ -210,8 +214,10 @@ export type Database = {
           name?: string
           price?: number
           slug?: string
+          status?: string
           stock?: number
           updated_at?: string
+          user_id?: string | null
         }
         Relationships: [
           {

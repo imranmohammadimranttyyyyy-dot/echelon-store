@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ShoppingBag, Menu, X, User, Search, ChevronDown } from 'lucide-react';
+import { ShoppingBag, Menu, X, User, Search, ChevronDown, Store } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useCartStore } from '@/lib/store';
 import { Button } from '@/components/ui/button';
@@ -58,6 +58,9 @@ export function Navbar() {
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
+          <Link to="/sell" className="nav-link text-sm font-medium flex items-center gap-1">
+            <Store className="w-4 h-4" /> Sell
+          </Link>
         </nav>
 
         {/* Right Side Actions */}
@@ -128,6 +131,13 @@ export function Navbar() {
                   onClick={() => setIsOpen(false)}
                 >
                   All Products
+                </Link>
+                <Link
+                  to="/sell"
+                  className="text-lg font-medium flex items-center gap-2"
+                  onClick={() => setIsOpen(false)}
+                >
+                  <Store className="w-5 h-5" /> Sell Your Products
                 </Link>
                 <div className="space-y-3">
                   <p className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
